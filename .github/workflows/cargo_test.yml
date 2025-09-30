@@ -1,0 +1,49 @@
+on:
+  push:
+    # Trigger on push events to the main branch and on changes to specific files
+    branches:
+      - "main"
+    paths:
+      - "**.rs"
+      - "**/Cargo.toml"
+      - "**/Cargo.lock"
+  pull_request:
+    # Trigger on pull request events to the main branch and on changes to specific files
+    types: [assigned, opened, synchronize, reopened]
+    paths:
+      - "**.rs"
+      - "**/Cargo.toml"
+      - "**/Cargo.lock"
+
+name: Cargo Test
+
+env:
+  CARGO_TERM_COLOR: always # Ensure coloured output in Cargo
+  CI: true # Indicate that this is a CI environment
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }} # Group by workflow and branch
+  cancel-in-progress: true # Cancel any in-progress runs for the same group
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  format:
+    name: Format
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+      - run: rustup component add rustfmt
+      - run: cargo fmt --all -- --check
+
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Run tests
+        run: cargo test --all-features
