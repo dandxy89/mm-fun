@@ -1,0 +1,24 @@
+[package]
+name = "mm_tg"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = { workspace = true }
+crossbeam-channel = { workspace = true }
+core_affinity = { workspace = true }
+dashmap = "6.1.0"
+dotenvy = "0.15.7"
+num_cpus = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+teloxide = { version = "0.17.0", features = ["macros"] }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[[bin]]
+name = "telegram_bot"
+path = "src/bin/telegram_bot.rs"
+
+[features]
+default = []
