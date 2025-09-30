@@ -1,0 +1,31 @@
+[package]
+name = "mm_ws"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+mm_binary = { workspace = true }
+mm_orderbook = { workspace = true }
+
+bytes = { workspace = true }
+core_affinity = { workspace = true }
+crossbeam-channel = { workspace = true }
+crossbeam-queue = { workspace = true }
+ctrlc = { workspace = true }
+num_cpus = { workspace = true }
+log ={ workspace = true }
+rapidhash = { workspace = true }
+tungstenite = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+serde_json = { workspace = true }
+simd-json = { workspace = true }
+
+[[bench]]
+name = "ingestion_benchmark"
+path = "benches/ingestion_benchmark.rs"
+harness = false
+
+[features]
+default = []
