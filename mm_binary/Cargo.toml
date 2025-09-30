@@ -1,0 +1,21 @@
+[package]
+name = "mm_binary"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+tikv-jemallocator = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+proptest = { workspace = true }
+
+[[bench]]
+name = "protocol_benchmark"
+path = "benches/protocol_benchmark.rs"
+harness = false
+
+[features]
+default = []
