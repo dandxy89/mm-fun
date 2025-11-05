@@ -3,6 +3,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
+use std::time::Instant;
 
 use mm_aeron::Subscriber;
 use mm_binary::CollectorStateMessage;
@@ -152,9 +153,61 @@ pub fn is_heartbeat_stale(last_timestamp: &Arc<AtomicU64>, timeout_ms: u64) -> b
     let elapsed = now.saturating_sub(last_hb);
 
     if elapsed > timeout_ms {
-        tracing::error!("Heartbeat timeout detected! Last heartbeat was {}ms ago", elapsed);
+        tracing::error!("Heartbeat timeout detected! Last heartbeat was {elapsed}ms ago");
         true
     } else {
         false
+    }
+}
+
+/// Return type for setup_default_monitors
+type MonitorSetupResult = Result<(std::thread::JoinHandle<()>, std::thread::JoinHandle<()>, Arc<AtomicU64>), Box<dyn std::error::Error>>;
+
+/// Convenience function to setup both state and heartbeat monitors with default configs
+///
+/// Returns (state_monitor_handle, heartbeat_monitor_handle, last_heartbeat_timestamp)
+pub fn setup_default_monitors(running: Arc<AtomicBool>) -> MonitorSetupResult {
+    let state_monitor_handle = spawn_state_monitor(StateMonitorConfig::default(), Arc::clone(&running))?;
+    let (heartbeat_monitor_handle, last_heartbeat_timestamp) = spawn_heartbeat_monitor(HeartbeatConfig::default(), running)?;
+
+    Ok((state_monitor_handle, heartbeat_monitor_handle, last_heartbeat_timestamp))
+}
+
+/// Helper struct to periodically check heartbeat staleness
+///
+/// This encapsulates the pattern of checking heartbeat staleness at regular intervals
+pub struct HeartbeatChecker {
+    last_check: Instant,
+    check_interval: Duration,
+    timeout_ms: u64,
+}
+
+impl HeartbeatChecker {
+    /// Create a new HeartbeatChecker with default settings
+    pub fn new() -> Self {
+        Self { last_check: Instant::now(), check_interval: Duration::from_secs(2), timeout_ms: crate::aeron_config::HEARTBEAT_TIMEOUT_MS }
+    }
+
+    /// Create a new HeartbeatChecker with custom settings
+    pub fn with_config(check_interval: Duration, timeout_ms: u64) -> Self {
+        Self { last_check: Instant::now(), check_interval, timeout_ms }
+    }
+
+    /// Check heartbeat staleness if enough time has elapsed since last check
+    ///
+    /// Returns true if heartbeat is stale, false otherwise
+    pub fn check_if_needed(&mut self, last_heartbeat: &Arc<AtomicU64>) -> bool {
+        if self.last_check.elapsed() > self.check_interval {
+            self.last_check = Instant::now();
+            is_heartbeat_stale(last_heartbeat, self.timeout_ms)
+        } else {
+            false
+        }
+    }
+}
+
+impl Default for HeartbeatChecker {
+    fn default() -> Self {
+        Self::new()
     }
 }

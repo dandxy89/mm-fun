@@ -61,23 +61,23 @@ impl PerformanceMetrics {
     }
 
     pub fn print_stats(&self) {
-        log::info!("\n=== Performance Statistics ===");
-        log::info!("Total messages: {}", self.message_count);
-        log::info!("Throughput: {:.2} msg/sec", self.throughput());
+        tracing::info!("\n=== Performance Statistics ===");
+        tracing::info!("Total messages: {}", self.message_count);
+        tracing::info!("Throughput: {:.2} msg/sec", self.throughput());
 
         if !self.latency_ns.is_empty() {
-            log::info!("\nLatency (nanoseconds):");
+            tracing::info!("\nLatency (nanoseconds):");
             if let Some(p50) = self.percentile(50.0) {
-                log::info!("  P50:   {:>10} ns ({:>7.2} μs)", p50, p50 as f64 / 1000.0);
+                tracing::info!("  P50:   {:>10} ns ({:>7.2} μs)", p50, p50 as f64 / 1000.0);
             }
             if let Some(p95) = self.percentile(95.0) {
-                log::info!("  P95:   {:>10} ns ({:>7.2} μs)", p95, p95 as f64 / 1000.0);
+                tracing::info!("  P95:   {:>10} ns ({:>7.2} μs)", p95, p95 as f64 / 1000.0);
             }
             if let Some(p99) = self.percentile(99.0) {
-                log::info!("  P99:   {:>10} ns ({:>7.2} μs)", p99, p99 as f64 / 1000.0);
+                tracing::info!("  P99:   {:>10} ns ({:>7.2} μs)", p99, p99 as f64 / 1000.0);
             }
             if let Some(p999) = self.percentile(99.9) {
-                log::info!("  P99.9: {:>10} ns ({:>7.2} μs)", p999, p999 as f64 / 1000.0);
+                tracing::info!("  P99.9: {:>10} ns ({:>7.2} μs)", p999, p999 as f64 / 1000.0);
             }
         }
     }

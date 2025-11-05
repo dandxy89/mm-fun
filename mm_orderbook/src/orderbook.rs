@@ -5,8 +5,7 @@ use mm_binary::CompressedString;
 use mm_binary::Exchange;
 use mm_binary::MarketDataMessage;
 use mm_binary::messages::UpdateType;
-use mm_binary::to_fixed_point;
-use ordered_float::OrderedFloat;
+use mm_binary::parse_json_decimal_to_fixed_point;
 use simd_json::prelude::ValueAsArray;
 use simd_json::prelude::ValueAsScalar;
 use simd_json::prelude::ValueObjectAccess;
@@ -15,8 +14,8 @@ use simd_json::prelude::ValueObjectAccess;
 pub struct OrderBook {
     pub symbol: Arc<str>,
     pub timestamp: u64,
-    pub bids: BTreeMap<OrderedFloat<f64>, f64>, // price -> quantity
-    pub asks: BTreeMap<OrderedFloat<f64>, f64>,
+    pub bids: BTreeMap<i64, i64>, // price -> quantity (fixed-point i64)
+    pub asks: BTreeMap<i64, i64>,
     pub max_levels: usize,
 }
 
@@ -29,53 +28,76 @@ impl OrderBook {
         Self { symbol: Arc::from(symbol), timestamp: 0, bids: BTreeMap::new(), asks: BTreeMap::new(), max_levels }
     }
 
-    pub fn update_bid(&mut self, price: f64, quantity: f64) {
-        let ordered_price = OrderedFloat(price);
-        if quantity == 0.0 {
-            self.bids.remove(&ordered_price);
+    pub fn update_bid(&mut self, price: i64, quantity: i64) {
+        if quantity == 0 {
+            self.bids.remove(&price);
         } else {
-            self.bids.insert(ordered_price, quantity);
+            self.bids.insert(price, quantity);
         }
     }
 
-    pub fn update_ask(&mut self, price: f64, quantity: f64) {
-        let ordered_price = OrderedFloat(price);
-        if quantity == 0.0 {
-            self.asks.remove(&ordered_price);
+    pub fn update_ask(&mut self, price: i64, quantity: i64) {
+        if quantity == 0 {
+            self.asks.remove(&price);
         } else {
-            self.asks.insert(ordered_price, quantity);
+            self.asks.insert(price, quantity);
         }
+    }
+
+    /// Apply a batch of orderbook updates from OrderBookBatchMessage
+    ///
+    /// This is a convenience method to avoid duplicate loops in binaries
+    pub fn apply_batch(&mut self, batch: &mm_binary::OrderBookBatchMessage) {
+        for bid in batch.bids() {
+            let price = bid.price;
+            let qty = bid.size;
+            if price > 0 {
+                self.update_bid(price, qty);
+            }
+        }
+
+        for ask in batch.asks() {
+            let price = ask.price;
+            let qty = ask.size;
+            if price > 0 {
+                self.update_ask(price, qty);
+            }
+        }
+
+        self.timestamp = batch.timestamp();
     }
 
     pub fn trim_book(&mut self) {
-        // Trim bids
+        // Trim bids (remove lowest prices)
         while self.bids.len() > self.max_levels {
-            if let Some((&lowest_bid, _)) = self.bids.iter().next() {
+            if let Some(&lowest_bid) = self.bids.keys().next() {
                 self.bids.remove(&lowest_bid);
             }
         }
 
-        // Trim asks
+        // Trim asks (remove highest prices)
         while self.asks.len() > self.max_levels {
-            if let Some((&highest_ask, _)) = self.asks.iter().next_back() {
+            if let Some(&highest_ask) = self.asks.keys().next_back() {
                 self.asks.remove(&highest_ask);
             }
         }
     }
 
-    pub fn best_bid(&self) -> Option<(f64, f64)> {
-        self.bids.iter().next_back().map(|(p, q)| (p.0, *q))
+    pub fn best_bid(&self) -> Option<(i64, i64)> {
+        self.bids.iter().next_back().map(|(p, q)| (*p, *q))
     }
 
-    pub fn best_ask(&self) -> Option<(f64, f64)> {
-        self.asks.iter().next().map(|(p, q)| (p.0, *q))
+    pub fn best_ask(&self) -> Option<(i64, i64)> {
+        self.asks.iter().next().map(|(p, q)| (*p, *q))
     }
 
-    pub fn mid_price(&self) -> Option<f64> {
-        Some((self.best_bid()?.0 + self.best_ask()?.0) / 2.0)
+    pub fn mid_price(&self) -> Option<i64> {
+        let (bid_price, _) = self.best_bid()?;
+        let (ask_price, _) = self.best_ask()?;
+        Some((bid_price + ask_price) / 2)
     }
 
-    pub fn spread(&self) -> Option<f64> {
+    pub fn spread(&self) -> Option<i64> {
         match (self.best_bid(), self.best_ask()) {
             (Some((bid_price, _)), Some((ask_price, _))) => Some(ask_price - bid_price),
             _ => None,
@@ -83,13 +105,13 @@ impl OrderBook {
     }
 
     /// Get top N bid levels
-    pub fn top_bids(&self, n: usize) -> Vec<(f64, f64)> {
-        self.bids.iter().rev().take(n).map(|(p, q)| (p.0, *q)).collect()
+    pub fn top_bids(&self, n: usize) -> Vec<(i64, i64)> {
+        self.bids.iter().rev().take(n).map(|(p, q)| (*p, *q)).collect()
     }
 
     /// Get top N ask levels
-    pub fn top_asks(&self, n: usize) -> Vec<(f64, f64)> {
-        self.asks.iter().take(n).map(|(p, q)| (p.0, *q)).collect()
+    pub fn top_asks(&self, n: usize) -> Vec<(i64, i64)> {
+        self.asks.iter().take(n).map(|(p, q)| (*p, *q)).collect()
     }
 }
 
@@ -111,18 +133,22 @@ pub fn json_to_binary(json_data: &str) -> Result<MarketDataMessage, Box<dyn std:
 
     let (bid_price, bid_size) = if let Some(first_bid) = bids.first() {
         let bid_array = first_bid.as_array().ok_or("Invalid bid format")?;
-        let price = bid_array[0].as_str().ok_or("Invalid bid price")?.parse::<f64>()?;
-        let size = bid_array[1].as_str().ok_or("Invalid bid size")?.parse::<f64>()?;
-        (to_fixed_point(price), to_fixed_point(size))
+        let price_str = bid_array[0].as_str().ok_or("Invalid bid price")?;
+        let size_str = bid_array[1].as_str().ok_or("Invalid bid size")?;
+        let price = parse_json_decimal_to_fixed_point(price_str.as_bytes())?;
+        let size = parse_json_decimal_to_fixed_point(size_str.as_bytes())?;
+        (price, size)
     } else {
         (0, 0)
     };
 
     let (ask_price, ask_size) = if let Some(first_ask) = asks.first() {
         let ask_array = first_ask.as_array().ok_or("Invalid ask format")?;
-        let price = ask_array[0].as_str().ok_or("Invalid ask price")?.parse::<f64>()?;
-        let size = ask_array[1].as_str().ok_or("Invalid ask size")?.parse::<f64>()?;
-        (to_fixed_point(price), to_fixed_point(size))
+        let price_str = ask_array[0].as_str().ok_or("Invalid ask price")?;
+        let size_str = ask_array[1].as_str().ok_or("Invalid ask size")?;
+        let price = parse_json_decimal_to_fixed_point(price_str.as_bytes())?;
+        let size = parse_json_decimal_to_fixed_point(size_str.as_bytes())?;
+        (price, size)
     } else {
         (0, 0)
     };
@@ -148,8 +174,10 @@ pub fn process_orderbook_update(orderbook: &mut OrderBook, json_data: &str) -> R
         for bid in bids {
             if let Some(bid_array) = bid.as_array() {
                 if bid_array.len() >= 2 {
-                    let price = bid_array[0].as_str().ok_or("Invalid bid price")?.parse::<f64>()?;
-                    let quantity = bid_array[1].as_str().ok_or("Invalid bid quantity")?.parse::<f64>()?;
+                    let price_str = bid_array[0].as_str().ok_or("Invalid bid price")?;
+                    let quantity_str = bid_array[1].as_str().ok_or("Invalid bid quantity")?;
+                    let price = parse_json_decimal_to_fixed_point(price_str.as_bytes())?;
+                    let quantity = parse_json_decimal_to_fixed_point(quantity_str.as_bytes())?;
                     orderbook.update_bid(price, quantity);
                 }
             }
@@ -161,8 +189,10 @@ pub fn process_orderbook_update(orderbook: &mut OrderBook, json_data: &str) -> R
         for ask in asks {
             if let Some(ask_array) = ask.as_array() {
                 if ask_array.len() >= 2 {
-                    let price = ask_array[0].as_str().ok_or("Invalid ask price")?.parse::<f64>()?;
-                    let quantity = ask_array[1].as_str().ok_or("Invalid ask quantity")?.parse::<f64>()?;
+                    let price_str = ask_array[0].as_str().ok_or("Invalid ask price")?;
+                    let quantity_str = ask_array[1].as_str().ok_or("Invalid ask quantity")?;
+                    let price = parse_json_decimal_to_fixed_point(price_str.as_bytes())?;
+                    let quantity = parse_json_decimal_to_fixed_point(quantity_str.as_bytes())?;
                     orderbook.update_ask(price, quantity);
                 }
             }
@@ -174,36 +204,53 @@ pub fn process_orderbook_update(orderbook: &mut OrderBook, json_data: &str) -> R
 
 #[cfg(test)]
 mod tests {
+    use mm_binary::FIXED_POINT_MULTIPLIER;
+
     use super::*;
 
     #[test]
     fn test_orderbook() {
         let mut ob = OrderBook::new("BTCUSDT");
 
-        ob.update_bid(50_000.0, 1.5);
-        ob.update_bid(49999.0, 2.0);
-        ob.update_ask(50001.0, 1.0);
-        ob.update_ask(50002.0, 0.5);
+        // Use fixed-point i64 values (8 decimal places)
+        let price_50000 = 50_000 * FIXED_POINT_MULTIPLIER;
+        let price_49999 = 49_999 * FIXED_POINT_MULTIPLIER;
+        let price_50001 = 50_001 * FIXED_POINT_MULTIPLIER;
+        let price_50002 = 50_002 * FIXED_POINT_MULTIPLIER;
+        let qty_1_5 = 150_000_000; // 1.5 * 100_000_000
+        let qty_2_0 = 200_000_000; // 2.0 * 100_000_000
+        let qty_1_0 = 100_000_000; // 1.0 * 100_000_000
+        let qty_0_5 = 50_000_000; // 0.5 * 100_000_000
 
-        assert_eq!(ob.best_bid(), Some((50_000.0, 1.5)));
-        assert_eq!(ob.best_ask(), Some((50001.0, 1.0)));
-        assert_eq!(ob.mid_price(), Some(50_000.5));
-        assert_eq!(ob.spread(), Some(1.0));
+        ob.update_bid(price_50000, qty_1_5);
+        ob.update_bid(price_49999, qty_2_0);
+        ob.update_ask(price_50001, qty_1_0);
+        ob.update_ask(price_50002, qty_0_5);
+
+        assert_eq!(ob.best_bid(), Some((price_50000, qty_1_5)));
+        assert_eq!(ob.best_ask(), Some((price_50001, qty_1_0)));
+        // Mid price: (50000 + 50001) / 2 = 50000.5
+        assert_eq!(ob.mid_price(), Some((price_50000 + price_50001) / 2));
+        assert_eq!(ob.spread(), Some(price_50001 - price_50000));
     }
 
     #[test]
     fn test_orderbook_updates() {
         let mut ob = OrderBook::new("BTCUSDT");
 
-        ob.update_bid(50_000.0, 1.5);
-        assert_eq!(ob.best_bid(), Some((50_000.0, 1.5)));
+        let price_50000 = 50_000 * FIXED_POINT_MULTIPLIER;
+        let qty_1_5 = 150_000_000;
+        let qty_2_0 = 200_000_000;
+
+        ob.update_bid(price_50000, qty_1_5);
+        assert_eq!(ob.best_bid(), Some((price_50000, qty_1_5)));
 
         // Update quantity
-        ob.update_bid(50_000.0, 2.0);
-        assert_eq!(ob.best_bid(), Some((50_000.0, 2.0)));
+        ob.update_bid(price_50000, qty_2_0);
+        assert_eq!(ob.best_bid(), Some((price_50000, qty_2_0)));
 
         // Remove level
-        ob.update_bid(50_000.0, 0.0);
+        ob.update_bid(price_50000, 0);
         assert_eq!(ob.best_bid(), None);
     }
 }

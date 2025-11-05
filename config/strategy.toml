@@ -1,0 +1,47 @@
+# Market Making Strategy Configuration
+
+# Symbol to trade
+symbol = "BTCUSDT"
+
+# Minimum spread in basis points (0.01% = 1 bp)
+min_spread_bps = 5.0
+
+# Volatility multiplier for spread calculation
+volatility_factor = 2.0
+
+# Inventory skew factor (how much to adjust quotes per unit of inventory)
+# For BTCUSDT: 0.0001 = 1bp per BTC
+inventory_skew_factor = 0.0001
+
+# Maximum position size (in base currency units)
+max_position_size = 10.0
+
+# Maximum order size per quote
+max_order_size = 1.0
+
+# Target inventory (usually 0 for market-neutral)
+target_inventory = 0.0
+
+# Base quote size
+base_quote_size = 0.1
+
+# Risk aversion parameter (higher = more conservative)
+risk_aversion = 1.0
+
+# EMA half-life for drift estimation (in seconds)
+drift_halflife_secs = 60.0
+
+# EMA half-life for volatility estimation (in seconds)
+volatility_halflife_secs = 300.0
+
+# Trade flow window for OFI calculation (in seconds)
+trade_flow_window_secs = 10.0
+
+# Minimum confidence score to publish quotes (0.0 to 1.0)
+min_confidence = 0.3
+
+# Quote publish interval in milliseconds
+quote_publish_interval_ms = 100
+
+# Daily loss limit (optional, set to 0 to disable)
+max_daily_loss = 1000.0

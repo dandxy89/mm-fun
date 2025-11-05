@@ -1,6 +1,10 @@
 pub mod aeron_config;
 pub mod cli;
+pub mod config_loader;
 pub mod monitoring;
+pub mod orderbook_helpers;
+pub mod orderbook_sync;
+pub mod publisher_helpers;
 pub mod shutdown_handler;
 pub mod time_utils;
 pub mod tracing_setup;

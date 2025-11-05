@@ -29,12 +29,12 @@ impl AeronClient {
 
         let aeron_dir = std::env::var("AERON_DIR").unwrap_or_else(|_| "/dev/shm/aeron".to_string());
 
-        info!("Creating shared Aeron client with directory: {}", aeron_dir);
+        info!("Creating shared Aeron client with directory: {aeron_dir}");
 
-        context.set_dir(&aeron_dir.into_c_string()).map_err(|e| AeronError::ClientCreationFailed(format!("{:?}", e)))?;
+        context.set_dir(&aeron_dir.into_c_string()).map_err(|err| AeronError::ClientCreationFailed(format!("{err:?}")))?;
 
-        let aeron = Aeron::new(&context).map_err(|e| AeronError::ClientCreationFailed(format!("{:?}", e)))?;
-        aeron.start().map_err(|e| AeronError::ClientCreationFailed(format!("{:?}", e)))?;
+        let aeron = Aeron::new(&context).map_err(|err| AeronError::ClientCreationFailed(format!("{err:?}")))?;
+        aeron.start().map_err(|err| AeronError::ClientCreationFailed(format!("{err:?}")))?;
 
         Ok(Self { aeron: Rc::new(aeron) })
     }

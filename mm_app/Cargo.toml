@@ -5,19 +5,26 @@ edition = "2021"
 
 [dependencies]
 mm_aeron = { workspace = true }
+mm_backtest = { workspace = true }
 mm_binary = { workspace = true }
 mm_http = { workspace = true }
 mm_orderbook = { workspace = true }
+mm_sim_executor = { workspace = true }
+mm_strategy = { workspace = true }
 mm_ws = { workspace = true }
 
 bytes = { workspace = true }
+time = { workspace = true }
+config = { workspace = true }
 crossbeam-channel = { workspace = true }
 ctrlc = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
 simd-json = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
 tracing-appender = { workspace = true }
+tracing-subscriber = { workspace = true }
 
 [[bin]]
 name = "mm_collector"
@@ -26,6 +33,18 @@ path = "src/bin/mm_collector.rs"
 [[bin]]
 name = "mm_pricing"
 path = "src/bin/mm_pricing.rs"
+
+[[bin]]
+name = "mm_strategy"
+path = "src/bin/mm_strategy.rs"
+
+[[bin]]
+name = "mm_simulator"
+path = "src/bin/mm_simulator.rs"
+
+[[bin]]
+name = "mm_backtest"
+path = "src/bin/mm_backtest.rs"
 
 [features]
 default = []

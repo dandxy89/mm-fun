@@ -1,0 +1,17 @@
+# Order Fill Simulator Configuration
+
+# Symbol to simulate
+symbol = "BTCUSDT"
+
+# Latency for order placement (microseconds)
+order_placement_latency_us = 10000  # 10ms
+
+# Latency for order cancellation (microseconds)
+order_cancellation_latency_us = 5000  # 5ms
+
+# Fill probability factor (0.0 to 1.0)
+# Lower = more conservative fills
+fill_probability_factor = 0.8
+
+# Enable queue position tracking
+track_queue_position = false

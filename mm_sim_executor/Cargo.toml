@@ -1,0 +1,17 @@
+[package]
+name = "mm_sim_executor"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+mm_orderbook = { workspace = true }
+mm_strategy = { workspace = true }
+
+serde = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+
+[features]
+default = []

@@ -26,9 +26,9 @@ impl Publisher {
     pub fn from_aeron(aeron: Rc<Aeron>, channel: &str, stream_id: i32) -> Result<Self> {
         let publication = aeron
             .async_add_publication(&channel.into_c_string(), stream_id)
-            .map_err(|e| AeronError::PublicationFailed { channel: channel.to_string(), stream_id, message: format!("{:?}", e) })?
+            .map_err(|err| AeronError::PublicationFailed { channel: channel.to_string(), stream_id, message: format!("{err:?}") })?
             .poll_blocking(Duration::from_secs(5))
-            .map_err(|e| AeronError::PublicationFailed { channel: channel.to_string(), stream_id, message: format!("{:?}", e) })?;
+            .map_err(|err| AeronError::PublicationFailed { channel: channel.to_string(), stream_id, message: format!("{err:?}") })?;
 
         info!("Created publisher for channel '{}', stream {}", channel, stream_id);
 
@@ -43,22 +43,22 @@ impl Publisher {
         // Set aeron directory from environment or use default
         let aeron_dir = std::env::var("AERON_DIR").unwrap_or_else(|_| "/dev/shm/aeron".to_string());
 
-        context.set_dir(&aeron_dir.into_c_string()).map_err(|e| AeronError::ClientCreationFailed(format!("{:?}", e)))?;
+        context.set_dir(&aeron_dir.into_c_string()).map_err(|err| AeronError::ClientCreationFailed(format!("{err:?}")))?;
 
         // Create Aeron instance
-        let aeron = Aeron::new(&context).map_err(|e| AeronError::ClientCreationFailed(format!("{:?}", e)))?;
+        let aeron = Aeron::new(&context).map_err(|err| AeronError::ClientCreationFailed(format!("{err:?}")))?;
 
         // Start the Aeron client
-        aeron.start().map_err(|e| AeronError::ClientCreationFailed(format!("{:?}", e)))?;
+        aeron.start().map_err(|err| AeronError::ClientCreationFailed(format!("{err:?}")))?;
 
         let aeron = Rc::new(aeron);
 
         // Create publication (async with blocking poll)
         let publication = aeron
             .async_add_publication(&channel.into_c_string(), stream_id)
-            .map_err(|e| AeronError::PublicationFailed { channel: channel.to_string(), stream_id, message: format!("{:?}", e) })?
+            .map_err(|err| AeronError::PublicationFailed { channel: channel.to_string(), stream_id, message: format!("{err:?}") })?
             .poll_blocking(Duration::from_secs(5))
-            .map_err(|e| AeronError::PublicationFailed { channel: channel.to_string(), stream_id, message: format!("{:?}", e) })?;
+            .map_err(|err| AeronError::PublicationFailed { channel: channel.to_string(), stream_id, message: format!("{err:?}") })?;
 
         info!("Created publisher for channel '{}', stream {}", channel, stream_id);
 

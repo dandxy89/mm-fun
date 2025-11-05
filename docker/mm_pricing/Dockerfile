@@ -1,5 +1,5 @@
 # Multi-stage build for mm_pricing
-FROM rust:1.91.0-slim as builder
+FROM rust:1.91.0-slim AS builder
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y \
@@ -21,6 +21,7 @@ WORKDIR /build
 # Copy workspace files
 COPY Cargo.toml Cargo.lock ./
 COPY mm_binary ./mm_binary
+COPY mm_types ./mm_types
 COPY mm_orderbook ./mm_orderbook
 COPY mm_ws ./mm_ws
 COPY mm_http ./mm_http
@@ -28,12 +29,15 @@ COPY mm_aeron ./mm_aeron
 COPY mm_tg ./mm_tg
 COPY mm_app ./mm_app
 COPY mm_ratelimit ./mm_ratelimit
+COPY mm_strategy ./mm_strategy
+COPY mm_sim_executor ./mm_sim_executor
+COPY mm_backtest ./mm_backtest
 
 # Build release binary
 RUN cargo build --release --bin mm_pricing
 
-# Runtime stage - using stable Debian bookworm instead of testing (trixie)
-FROM debian:bookworm-slim
+# Runtime stage - using Debian trixie for GLIBC 2.38+ support
+FROM debian:trixie-slim
 
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y \

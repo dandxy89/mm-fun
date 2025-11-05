@@ -1,0 +1,18 @@
+[package]
+name = "mm_strategy"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+mm_binary = { workspace = true }
+mm_types = { workspace = true }
+
+serde = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+proptest = { workspace = true }
+
+[features]
+default = []

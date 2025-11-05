@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "mm_binary",
+    "mm_types",
     "mm_orderbook",
     "mm_ws",
     "mm_http",
@@ -8,28 +9,37 @@ members = [
     "mm_aeron",
     "mm_tg",
     "mm_ratelimit",
+    "mm_strategy",
+    "mm_sim_executor",
+    "mm_backtest",
 ]
 resolver = "3"
 
 [workspace.dependencies]
 mm_aeron = { path = "mm_aeron" }
+mm_backtest = { path = "mm_backtest" }
 mm_binary = { path = "mm_binary" }
 mm_http = { path = "mm_http" }
 mm_orderbook = { path = "mm_orderbook" }
+mm_ratelimit = { path = "mm_ratelimit" }
+mm_sim_executor = { path = "mm_sim_executor" }
+mm_strategy = { path = "mm_strategy" }
 mm_tg = { path = "mm_tg" }
+mm_types = { path = "mm_types" }
 mm_ws = { path = "mm_ws" }
 
-rusteron-client = "0.1"
-rusteron-media-driver = "0.1.157"
 anyhow = "1.0.100"
 bytes = "1.10.1"
-parking_lot = "0.12.5"
+time = { version = "0.3", features = ["serde", "parsing", "formatting", "macros"] }
+config = "0.14.1"
 core_affinity = "0.8.3"
 criterion = "0.7.0"
 crossbeam-channel = "0.5.15"
 crossbeam-queue = "0.3.12"
+csv = "1.3.1"
 ctrlc = "3.5.0"
 dashmap = "6.1.0"
+dotenvy = "0.15.7"
 futures = "0.3.31"
 futures-util = "0.3.31"
 heapless = "0.9.1"
@@ -41,6 +51,7 @@ hyper-util = { version = "0.1.17", features = [
 log = "0.4.28"
 num_cpus = "1.17.0"
 ordered-float = "5.1.0"
+parking_lot = "0.12.5"
 proptest = "1.9.0"
 rapidhash = "4.1.1"
 reqwest = { version = "0.12.24", default-features = false, features = [
@@ -51,17 +62,21 @@ reqwest = { version = "0.12.24", default-features = false, features = [
     "gzip",
     "brotli",
 ] }
+rusteron-client = "0.1"
+rusteron-media-driver = "0.1.157"
 rustls = "0.23.35"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
 simd-json = "0.17.0"
+statrs = "0.17.1"
 thiserror = "2.0.17"
 tikv-jemallocator = "0.6.1"
 tokio = { version = "1.48.0", features = ["rt-multi-thread", "macros", "time"] }
+toml = "0.8.19"
 tracing = "0.1.41"
-tracing-subscriber = { version = "0.3.20", features = ["env-filter", "fmt", "ansi"] }
 tracing-appender = "0.2.3"
-tungstenite = { version = "0.28.0", features = ["native-tls"] }
+tracing-subscriber = { version = "0.3.20", features = ["env-filter", "fmt", "ansi"] }
+tungstenite = { version = "0.28.0", default-features = false, features = ["rustls-tls-webpki-roots", "handshake"] }
 url = "2.5.7"
 
 [profile.release]
@@ -70,6 +85,8 @@ lto = "fat"
 codegen-units = 1
 panic = "abort"
 overflow-checks = false
+strip = true              # Strip symbols (smaller binary, faster loading)
+incremental = false       # Disable incremental compilation for better optimization
 
 [profile.bench]
 inherits = "release"

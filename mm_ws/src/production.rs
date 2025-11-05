@@ -74,7 +74,7 @@ impl ProductionIngestor {
     }
 
     pub fn stop(&self) {
-        log::info!("Stopping production ingestor...");
+        tracing::info!("Stopping production ingestor...");
         self.running.store(false, Ordering::Relaxed);
     }
 
@@ -82,7 +82,7 @@ impl ProductionIngestor {
         let running = Arc::clone(&self.running);
 
         ctrlc::set_handler(move || {
-            log::info!("\nReceived Ctrl+C, shutting down gracefully...");
+            tracing::info!("\nReceived Ctrl+C, shutting down gracefully...");
             running.store(false, Ordering::Relaxed);
         })
         .expect("Error setting Ctrl-C handler");
@@ -105,7 +105,7 @@ impl ProductionIngestor {
 
                 let messages_per_second = (current_count - last_count) as f64 / current_time.duration_since(last_time).as_secs_f64();
 
-                log::info!(
+                tracing::info!(
                     "[METRICS] Messages/sec: {:.2}, Total: {}, Last: {}s ago",
                     messages_per_second,
                     current_count,
@@ -116,7 +116,7 @@ impl ProductionIngestor {
                 last_time = current_time;
             }
 
-            log::info!("Metrics thread stopped");
+            tracing::info!("Metrics thread stopped");
         });
     }
 
@@ -136,7 +136,7 @@ impl ProductionIngestor {
             match self.connect_and_ingest_single(&symbol) {
                 Ok(_) => break,
                 Err(err) => {
-                    log::error!("Connection error for {symbol}: {err}, retrying in {:?}", self.config.reconnect_delay);
+                    tracing::error!("Connection error for {symbol}: {err}, retrying in {:?}", self.config.reconnect_delay);
                     std::thread::sleep(self.config.reconnect_delay);
                 }
             }
@@ -177,7 +177,7 @@ impl ProductionIngestor {
             match self.connect_and_ingest_multi() {
                 Ok(_) => break,
                 Err(err) => {
-                    log::error!("Multi-symbol connection error: {err}, retrying in {:?}", self.config.reconnect_delay);
+                    tracing::error!("Multi-symbol connection error: {err}, retrying in {:?}", self.config.reconnect_delay);
                     std::thread::sleep(self.config.reconnect_delay);
                 }
             }

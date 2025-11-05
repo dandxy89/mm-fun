@@ -47,18 +47,18 @@ impl Subscriber {
                 Handlers::no_available_image_handler(),
                 Handlers::no_unavailable_image_handler(),
             )
-            .map_err(|e| AeronError::SubscriptionFailed { channel: channel.to_string(), stream_id, message: format!("{:?}", e) })?
+            .map_err(|err| AeronError::SubscriptionFailed { channel: channel.to_string(), stream_id, message: format!("{err:?}") })?
             .poll_blocking(Duration::from_secs(5))
-            .map_err(|e| AeronError::SubscriptionFailed { channel: channel.to_string(), stream_id, message: format!("{:?}", e) })?;
+            .map_err(|err| AeronError::SubscriptionFailed { channel: channel.to_string(), stream_id, message: format!("{err:?}") })?;
 
         // Create fragment handler
         let message_buffer = Rc::new(Mutex::new(None));
         let message_capture = MessageCapture { buffer: Rc::clone(&message_buffer) };
 
-        let (handler, _inner) = Handler::leak_with_fragment_assembler(message_capture).map_err(|e| AeronError::SubscriptionFailed {
+        let (handler, _inner) = Handler::leak_with_fragment_assembler(message_capture).map_err(|err| AeronError::SubscriptionFailed {
             channel: channel.to_string(),
             stream_id,
-            message: format!("{:?}", e),
+            message: format!("{err:?}"),
         })?;
 
         info!("Created subscriber for channel '{}', stream {}", channel, stream_id);
@@ -81,13 +81,13 @@ impl Subscriber {
         // Set aeron directory from environment or use default
         let aeron_dir = std::env::var("AERON_DIR").unwrap_or_else(|_| "/dev/shm/aeron".to_string());
 
-        context.set_dir(&aeron_dir.into_c_string()).map_err(|e| AeronError::ClientCreationFailed(format!("{:?}", e)))?;
+        context.set_dir(&aeron_dir.into_c_string()).map_err(|err| AeronError::ClientCreationFailed(format!("{err:?}")))?;
 
         // Create Aeron instance
-        let aeron = Aeron::new(&context).map_err(|e| AeronError::ClientCreationFailed(format!("{:?}", e)))?;
+        let aeron = Aeron::new(&context).map_err(|err| AeronError::ClientCreationFailed(format!("{err:?}")))?;
 
         // Start the Aeron client
-        aeron.start().map_err(|e| AeronError::ClientCreationFailed(format!("{:?}", e)))?;
+        aeron.start().map_err(|err| AeronError::ClientCreationFailed(format!("{err:?}")))?;
 
         let aeron = Rc::new(aeron);
 
@@ -99,17 +99,17 @@ impl Subscriber {
                 Handlers::no_available_image_handler(),
                 Handlers::no_unavailable_image_handler(),
             )
-            .map_err(|e| AeronError::SubscriptionFailed { channel: channel.to_string(), stream_id, message: format!("{:?}", e) })?
+            .map_err(|err| AeronError::SubscriptionFailed { channel: channel.to_string(), stream_id, message: format!("{err:?}") })?
             .poll_blocking(Duration::from_secs(5))
-            .map_err(|e| AeronError::SubscriptionFailed { channel: channel.to_string(), stream_id, message: format!("{:?}", e) })?;
+            .map_err(|err| AeronError::SubscriptionFailed { channel: channel.to_string(), stream_id, message: format!("{err:?}") })?;
 
         // Create fragment handler
         let message_capture = MessageCapture { buffer: Rc::clone(&self.message_buffer) };
 
-        let (handler, _inner) = Handler::leak_with_fragment_assembler(message_capture).map_err(|e| AeronError::SubscriptionFailed {
+        let (handler, _inner) = Handler::leak_with_fragment_assembler(message_capture).map_err(|err| AeronError::SubscriptionFailed {
             channel: channel.to_string(),
             stream_id,
-            message: format!("{:?}", e),
+            message: format!("{err:?}"),
         })?;
 
         info!("Created subscriber for channel '{}', stream {}", channel, stream_id);
@@ -142,7 +142,7 @@ impl Subscriber {
             }
 
             // Poll for messages
-            subscription.poll(Some(handler), 10).map_err(|e| AeronError::PublishFailed(format!("{:?}", e)))?;
+            subscription.poll(Some(handler), 10).map_err(|err| AeronError::PublishFailed(format!("{err:?}")))?;
 
             // Check if we received a message
             let mut buffer = self.message_buffer.lock();

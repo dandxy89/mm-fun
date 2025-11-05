@@ -61,6 +61,84 @@ pub struct CollectorStateMessage {
     pub _final_pad: [u8; 12],
 }
 
+/// Trade message for tracking individual trades
+#[repr(C, align(16))]
+#[derive(Debug, Clone, Copy)]
+pub struct TradeMessage {
+    pub header: u8,
+    pub side: u8,         // TradeSide
+    pub is_aggressor: u8, // 0 = maker, 1 = taker
+    pub sequence: u8,
+    pub _pad: [u8; 4],
+    pub symbol_low: u64,
+    pub symbol_high: u64,
+    pub timestamp: u64,
+    pub trade_id: u64,
+    pub price: i64,
+    pub quantity: i64,
+    pub crc32: u32,
+    pub _final_pad: [u8; 4],
+}
+
+/// Quote message for strategy output
+#[repr(C, align(16))]
+#[derive(Debug, Clone, Copy)]
+pub struct QuoteMessage {
+    pub header: u8,
+    pub strategy_id: u8,
+    pub sequence: u8,
+    pub _pad: [u8; 5],
+    pub symbol_low: u64,
+    pub symbol_high: u64,
+    pub timestamp: u64,
+    pub bid_price: i64,
+    pub bid_size: i64,
+    pub ask_price: i64,
+    pub ask_size: i64,
+    pub fair_value: i64,
+    pub inventory: i64,
+    pub confidence: i64,
+    pub crc32: u32,
+    pub _final_pad: [u8; 12],
+}
+
+/// Position tracking message
+#[repr(C, align(16))]
+#[derive(Debug, Clone, Copy)]
+pub struct PositionMessage {
+    pub header: u8,
+    pub sequence: u8,
+    pub _pad: [u8; 6],
+    pub symbol_low: u64,
+    pub symbol_high: u64,
+    pub timestamp: u64,
+    pub quantity: i64,
+    pub avg_entry_price: i64,
+    pub unrealized_pnl: i64,
+    pub realized_pnl: i64,
+    pub crc32: u32,
+    pub _final_pad: [u8; 12],
+}
+
+/// Order fill message for simulation and execution
+#[repr(C, align(16))]
+#[derive(Debug, Clone, Copy)]
+pub struct OrderFillMessage {
+    pub header: u8,
+    pub side: u8,     // OrderSide
+    pub is_maker: u8, // 0 = taker, 1 = maker
+    pub sequence: u8,
+    pub _pad: [u8; 4],
+    pub symbol_low: u64,
+    pub symbol_high: u64,
+    pub timestamp: u64,
+    pub order_id: u64,
+    pub fill_price: i64,
+    pub fill_quantity: i64,
+    pub crc32: u32,
+    pub _final_pad: [u8; 4],
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum CollectorState {
@@ -75,6 +153,20 @@ pub enum CollectorState {
 pub enum UpdateType {
     Snapshot = 0,
     Update = 1,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum TradeSide {
+    Buy = 0,
+    Sell = 1,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum OrderSide {
+    Bid = 0,
+    Ask = 1,
 }
 
 impl MarketDataMessage {
@@ -559,6 +651,548 @@ impl CollectorStateMessage {
         self.timestamp = self.timestamp.swap_bytes();
         self.messages_received = self.messages_received.swap_bytes();
         self.crc32 = self.crc32.swap_bytes();
+    }
+}
+
+impl TradeMessage {
+    pub const SIZE: usize = 72;
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        exchange: Exchange,
+        symbol: CompressedString,
+        encoding: EncodingScheme,
+        timestamp: u64,
+        trade_id: u64,
+        price: i64,
+        quantity: i64,
+        side: TradeSide,
+        is_aggressor: bool,
+    ) -> Self {
+        Self::new_with_sequence(exchange, symbol, encoding, timestamp, trade_id, price, quantity, side, is_aggressor, 0)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_with_sequence(
+        exchange: Exchange,
+        symbol: CompressedString,
+        encoding: EncodingScheme,
+        timestamp: u64,
+        trade_id: u64,
+        price: i64,
+        quantity: i64,
+        side: TradeSide,
+        is_aggressor: bool,
+        sequence: u8,
+    ) -> Self {
+        let mut header = 0u8;
+        header |= 4 << 4; // Message type 4
+        header |= (exchange as u8) << 2;
+        header |= encoding as u8;
+
+        let mut msg = TradeMessage {
+            header,
+            side: side as u8,
+            is_aggressor: is_aggressor as u8,
+            sequence,
+            _pad: [0; 4],
+            symbol_low: symbol.low,
+            symbol_high: symbol.high,
+            timestamp,
+            trade_id,
+            price,
+            quantity,
+            crc32: 0,
+            _final_pad: [0; 4],
+        };
+
+        msg.crc32 = msg.calculate_crc32();
+        msg
+    }
+
+    #[inline]
+    pub fn message_type(&self) -> u8 {
+        (self.header >> 4) & 0xF
+    }
+
+    #[inline]
+    pub fn exchange(&self) -> Result<Exchange> {
+        let id = (self.header >> 2) & 0x3;
+        Exchange::from_u8(id).ok_or(ProtocolError::InvalidExchange { id })
+    }
+
+    #[inline]
+    pub fn encoding_scheme(&self) -> EncodingScheme {
+        match self.header & 0x3 {
+            0 => EncodingScheme::Hex4Bit,
+            1 => EncodingScheme::Alphabetic5Bit,
+            2 => EncodingScheme::AlphaNumeric6Bit,
+            3 => EncodingScheme::Ascii7Bit,
+            _ => unreachable!(),
+        }
+    }
+
+    #[inline]
+    pub fn symbol(&self) -> CompressedString {
+        CompressedString { low: self.symbol_low, high: self.symbol_high }
+    }
+
+    #[inline]
+    pub fn trade_side(&self) -> TradeSide {
+        if self.side == 0 { TradeSide::Buy } else { TradeSide::Sell }
+    }
+
+    pub fn validate_checksum(&self) -> Result<()> {
+        let calculated = self.calculate_crc32();
+        if calculated != self.crc32 {
+            return Err(ProtocolError::InvalidChecksum { expected: self.crc32, actual: calculated });
+        }
+        Ok(())
+    }
+
+    fn calculate_crc32(&self) -> u32 {
+        // Calculate CRC over all fields BEFORE the crc32 field
+        // Fields: header(1) + side(1) + is_aggressor(1) + sequence(1) + _pad(4) +
+        //         symbol_low(8) + symbol_high(8) + timestamp(8) + trade_id(8) +
+        //         price(8) + quantity(8) = 56 bytes
+        let bytes = unsafe { std::slice::from_raw_parts(self as *const _ as *const u8, 56) };
+        crate::checksum::calculate_crc32c(bytes)
+    }
+
+    pub fn to_bytes(&self) -> [u8; Self::SIZE] {
+        let bytes = unsafe { std::slice::from_raw_parts(self as *const _ as *const u8, Self::SIZE) };
+        let mut result = [0u8; Self::SIZE];
+        result.copy_from_slice(bytes);
+        result
+    }
+
+    /// # Safety
+    ///
+    /// The caller must ensure:
+    /// - `bytes.len() >= Self::SIZE`
+    /// - `bytes.as_ptr()` is aligned to 16 bytes
+    pub unsafe fn from_bytes_unchecked(bytes: &[u8]) -> &Self {
+        debug_assert!(bytes.len() >= Self::SIZE);
+        debug_assert!((bytes.as_ptr() as usize).is_multiple_of(16));
+        unsafe { &*(bytes.as_ptr() as *const Self) }
+    }
+
+    /// Parse from bytes, handling unaligned buffers (Aeron doesn't guarantee 16-byte alignment)
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        if bytes.len() < Self::SIZE {
+            return Err(ProtocolError::InvalidLength { expected: Self::SIZE, actual: bytes.len() });
+        }
+
+        // Check if aligned, if not, copy to aligned buffer
+        if (bytes.as_ptr() as usize).is_multiple_of(16) {
+            // Fast path: already aligned
+            let msg = unsafe { Self::from_bytes_unchecked(bytes) };
+            msg.validate_checksum()?;
+            Ok(*msg)
+        } else {
+            // Slow path: copy to aligned buffer
+            #[repr(C, align(16))]
+            struct AlignedBuffer([u8; 72]);
+
+            let mut aligned = AlignedBuffer([0u8; 72]);
+            aligned.0.copy_from_slice(&bytes[..Self::SIZE]);
+
+            let msg = unsafe { Self::from_bytes_unchecked(&aligned.0) };
+            msg.validate_checksum()?;
+            Ok(*msg)
+        }
+    }
+}
+
+impl QuoteMessage {
+    pub const SIZE: usize = 104;
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        strategy_id: u8,
+        symbol: CompressedString,
+        encoding: EncodingScheme,
+        timestamp: u64,
+        bid_price: i64,
+        bid_size: i64,
+        ask_price: i64,
+        ask_size: i64,
+        fair_value: i64,
+        inventory: i64,
+        confidence: i64,
+    ) -> Self {
+        Self::new_with_sequence(
+            strategy_id,
+            symbol,
+            encoding,
+            timestamp,
+            bid_price,
+            bid_size,
+            ask_price,
+            ask_size,
+            fair_value,
+            inventory,
+            confidence,
+            0,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_with_sequence(
+        strategy_id: u8,
+        symbol: CompressedString,
+        encoding: EncodingScheme,
+        timestamp: u64,
+        bid_price: i64,
+        bid_size: i64,
+        ask_price: i64,
+        ask_size: i64,
+        fair_value: i64,
+        inventory: i64,
+        confidence: i64,
+        sequence: u8,
+    ) -> Self {
+        let mut header = 0u8;
+        header |= 5 << 4; // Message type 5
+        header |= encoding as u8;
+
+        let mut msg = QuoteMessage {
+            header,
+            strategy_id,
+            sequence,
+            _pad: [0; 5],
+            symbol_low: symbol.low,
+            symbol_high: symbol.high,
+            timestamp,
+            bid_price,
+            bid_size,
+            ask_price,
+            ask_size,
+            fair_value,
+            inventory,
+            confidence,
+            crc32: 0,
+            _final_pad: [0; 12],
+        };
+
+        msg.crc32 = msg.calculate_crc32();
+        msg
+    }
+
+    #[inline]
+    pub fn message_type(&self) -> u8 {
+        (self.header >> 4) & 0xF
+    }
+
+    #[inline]
+    pub fn encoding_scheme(&self) -> EncodingScheme {
+        match self.header & 0x3 {
+            0 => EncodingScheme::Hex4Bit,
+            1 => EncodingScheme::Alphabetic5Bit,
+            2 => EncodingScheme::AlphaNumeric6Bit,
+            3 => EncodingScheme::Ascii7Bit,
+            _ => unreachable!(),
+        }
+    }
+
+    #[inline]
+    pub fn symbol(&self) -> CompressedString {
+        CompressedString { low: self.symbol_low, high: self.symbol_high }
+    }
+
+    pub fn validate_checksum(&self) -> Result<()> {
+        let calculated = self.calculate_crc32();
+        if calculated != self.crc32 {
+            return Err(ProtocolError::InvalidChecksum { expected: self.crc32, actual: calculated });
+        }
+        Ok(())
+    }
+
+    fn calculate_crc32(&self) -> u32 {
+        let bytes = unsafe { std::slice::from_raw_parts(self as *const _ as *const u8, 88) };
+        crate::checksum::calculate_crc32c(bytes)
+    }
+
+    pub fn to_bytes(&self) -> [u8; Self::SIZE] {
+        let bytes = unsafe { std::slice::from_raw_parts(self as *const _ as *const u8, Self::SIZE) };
+        let mut result = [0u8; Self::SIZE];
+        result.copy_from_slice(bytes);
+        result
+    }
+
+    /// # Safety
+    ///
+    /// The caller must ensure:
+    /// - `bytes.len() >= Self::SIZE`
+    /// - `bytes.as_ptr()` is aligned to 16 bytes
+    pub unsafe fn from_bytes_unchecked(bytes: &[u8]) -> &Self {
+        debug_assert!(bytes.len() >= Self::SIZE);
+        debug_assert!((bytes.as_ptr() as usize).is_multiple_of(16));
+        unsafe { &*(bytes.as_ptr() as *const Self) }
+    }
+
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        if bytes.len() < Self::SIZE {
+            return Err(ProtocolError::InvalidLength { expected: Self::SIZE, actual: bytes.len() });
+        }
+
+        if !(bytes.as_ptr() as usize).is_multiple_of(16) {
+            return Err(ProtocolError::InvalidAlignment { address: bytes.as_ptr() as usize });
+        }
+
+        let msg = unsafe { Self::from_bytes_unchecked(bytes) };
+        msg.validate_checksum()?;
+        Ok(*msg)
+    }
+}
+
+impl PositionMessage {
+    pub const SIZE: usize = 72;
+
+    pub fn new(
+        symbol: CompressedString,
+        encoding: EncodingScheme,
+        timestamp: u64,
+        quantity: i64,
+        avg_entry_price: i64,
+        unrealized_pnl: i64,
+        realized_pnl: i64,
+    ) -> Self {
+        Self::new_with_sequence(symbol, encoding, timestamp, quantity, avg_entry_price, unrealized_pnl, realized_pnl, 0)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_with_sequence(
+        symbol: CompressedString,
+        encoding: EncodingScheme,
+        timestamp: u64,
+        quantity: i64,
+        avg_entry_price: i64,
+        unrealized_pnl: i64,
+        realized_pnl: i64,
+        sequence: u8,
+    ) -> Self {
+        let mut header = 0u8;
+        header |= 6 << 4; // Message type 6
+        header |= encoding as u8;
+
+        let mut msg = PositionMessage {
+            header,
+            sequence,
+            _pad: [0; 6],
+            symbol_low: symbol.low,
+            symbol_high: symbol.high,
+            timestamp,
+            quantity,
+            avg_entry_price,
+            unrealized_pnl,
+            realized_pnl,
+            crc32: 0,
+            _final_pad: [0; 12],
+        };
+
+        msg.crc32 = msg.calculate_crc32();
+        msg
+    }
+
+    #[inline]
+    pub fn message_type(&self) -> u8 {
+        (self.header >> 4) & 0xF
+    }
+
+    #[inline]
+    pub fn encoding_scheme(&self) -> EncodingScheme {
+        match self.header & 0x3 {
+            0 => EncodingScheme::Hex4Bit,
+            1 => EncodingScheme::Alphabetic5Bit,
+            2 => EncodingScheme::AlphaNumeric6Bit,
+            3 => EncodingScheme::Ascii7Bit,
+            _ => unreachable!(),
+        }
+    }
+
+    #[inline]
+    pub fn symbol(&self) -> CompressedString {
+        CompressedString { low: self.symbol_low, high: self.symbol_high }
+    }
+
+    pub fn validate_checksum(&self) -> Result<()> {
+        let calculated = self.calculate_crc32();
+        if calculated != self.crc32 {
+            return Err(ProtocolError::InvalidChecksum { expected: self.crc32, actual: calculated });
+        }
+        Ok(())
+    }
+
+    fn calculate_crc32(&self) -> u32 {
+        let bytes = unsafe { std::slice::from_raw_parts(self as *const _ as *const u8, 56) };
+        crate::checksum::calculate_crc32c(bytes)
+    }
+
+    pub fn to_bytes(&self) -> [u8; Self::SIZE] {
+        let bytes = unsafe { std::slice::from_raw_parts(self as *const _ as *const u8, Self::SIZE) };
+        let mut result = [0u8; Self::SIZE];
+        result.copy_from_slice(bytes);
+        result
+    }
+
+    /// # Safety
+    ///
+    /// The caller must ensure:
+    /// - `bytes.len() >= Self::SIZE`
+    /// - `bytes.as_ptr()` is aligned to 16 bytes
+    pub unsafe fn from_bytes_unchecked(bytes: &[u8]) -> &Self {
+        debug_assert!(bytes.len() >= Self::SIZE);
+        debug_assert!((bytes.as_ptr() as usize).is_multiple_of(16));
+        unsafe { &*(bytes.as_ptr() as *const Self) }
+    }
+
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        if bytes.len() < Self::SIZE {
+            return Err(ProtocolError::InvalidLength { expected: Self::SIZE, actual: bytes.len() });
+        }
+
+        if !(bytes.as_ptr() as usize).is_multiple_of(16) {
+            return Err(ProtocolError::InvalidAlignment { address: bytes.as_ptr() as usize });
+        }
+
+        let msg = unsafe { Self::from_bytes_unchecked(bytes) };
+        msg.validate_checksum()?;
+        Ok(*msg)
+    }
+}
+
+impl OrderFillMessage {
+    pub const SIZE: usize = 72;
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        exchange: Exchange,
+        symbol: CompressedString,
+        encoding: EncodingScheme,
+        timestamp: u64,
+        order_id: u64,
+        fill_price: i64,
+        fill_quantity: i64,
+        side: OrderSide,
+        is_maker: bool,
+    ) -> Self {
+        Self::new_with_sequence(exchange, symbol, encoding, timestamp, order_id, fill_price, fill_quantity, side, is_maker, 0)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_with_sequence(
+        exchange: Exchange,
+        symbol: CompressedString,
+        encoding: EncodingScheme,
+        timestamp: u64,
+        order_id: u64,
+        fill_price: i64,
+        fill_quantity: i64,
+        side: OrderSide,
+        is_maker: bool,
+        sequence: u8,
+    ) -> Self {
+        let mut header = 0u8;
+        header |= 7 << 4; // Message type 7
+        header |= (exchange as u8) << 2;
+        header |= encoding as u8;
+
+        let mut msg = OrderFillMessage {
+            header,
+            side: side as u8,
+            is_maker: is_maker as u8,
+            sequence,
+            _pad: [0; 4],
+            symbol_low: symbol.low,
+            symbol_high: symbol.high,
+            timestamp,
+            order_id,
+            fill_price,
+            fill_quantity,
+            crc32: 0,
+            _final_pad: [0; 4],
+        };
+
+        msg.crc32 = msg.calculate_crc32();
+        msg
+    }
+
+    #[inline]
+    pub fn message_type(&self) -> u8 {
+        (self.header >> 4) & 0xF
+    }
+
+    #[inline]
+    pub fn exchange(&self) -> Result<Exchange> {
+        let id = (self.header >> 2) & 0x3;
+        Exchange::from_u8(id).ok_or(ProtocolError::InvalidExchange { id })
+    }
+
+    #[inline]
+    pub fn encoding_scheme(&self) -> EncodingScheme {
+        match self.header & 0x3 {
+            0 => EncodingScheme::Hex4Bit,
+            1 => EncodingScheme::Alphabetic5Bit,
+            2 => EncodingScheme::AlphaNumeric6Bit,
+            3 => EncodingScheme::Ascii7Bit,
+            _ => unreachable!(),
+        }
+    }
+
+    #[inline]
+    pub fn symbol(&self) -> CompressedString {
+        CompressedString { low: self.symbol_low, high: self.symbol_high }
+    }
+
+    #[inline]
+    pub fn order_side(&self) -> OrderSide {
+        if self.side == 0 { OrderSide::Bid } else { OrderSide::Ask }
+    }
+
+    pub fn validate_checksum(&self) -> Result<()> {
+        let calculated = self.calculate_crc32();
+        if calculated != self.crc32 {
+            return Err(ProtocolError::InvalidChecksum { expected: self.crc32, actual: calculated });
+        }
+        Ok(())
+    }
+
+    fn calculate_crc32(&self) -> u32 {
+        let bytes = unsafe { std::slice::from_raw_parts(self as *const _ as *const u8, 64) };
+        crate::checksum::calculate_crc32c(bytes)
+    }
+
+    pub fn to_bytes(&self) -> [u8; Self::SIZE] {
+        let bytes = unsafe { std::slice::from_raw_parts(self as *const _ as *const u8, Self::SIZE) };
+        let mut result = [0u8; Self::SIZE];
+        result.copy_from_slice(bytes);
+        result
+    }
+
+    /// # Safety
+    ///
+    /// The caller must ensure:
+    /// - `bytes.len() >= Self::SIZE`
+    /// - `bytes.as_ptr()` is aligned to 16 bytes
+    pub unsafe fn from_bytes_unchecked(bytes: &[u8]) -> &Self {
+        debug_assert!(bytes.len() >= Self::SIZE);
+        debug_assert!((bytes.as_ptr() as usize).is_multiple_of(16));
+        unsafe { &*(bytes.as_ptr() as *const Self) }
+    }
+
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        if bytes.len() < Self::SIZE {
+            return Err(ProtocolError::InvalidLength { expected: Self::SIZE, actual: bytes.len() });
+        }
+
+        if !(bytes.as_ptr() as usize).is_multiple_of(16) {
+            return Err(ProtocolError::InvalidAlignment { address: bytes.as_ptr() as usize });
+        }
+
+        let msg = unsafe { Self::from_bytes_unchecked(bytes) };
+        msg.validate_checksum()?;
+        Ok(*msg)
     }
 }
 

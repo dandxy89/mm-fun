@@ -48,10 +48,27 @@ impl BinanceIngestor {
         })
     }
 
+    /// Create a new trade stream ingestor
+    pub fn new_trade_stream(symbol: &str) -> Result<Self, Box<dyn std::error::Error>> {
+        let url = format!("wss://stream.binance.com:9443/ws/{}@trade", symbol.to_lowercase()).into_boxed_str();
+        let (tx, rx) = bounded(10_000);
+
+        Ok(Self {
+            _symbol: Arc::from(symbol),
+            url,
+            websocket: None,
+            message_sender: tx,
+            message_receiver: rx,
+            running: Arc::new(AtomicBool::new(false)),
+            messages_processed: Arc::new(AtomicU64::new(0)),
+            buffer_pool: Arc::new(BufferPool::new(BUFFER_POOL_SIZE, BUFFER_SIZE)),
+        })
+    }
+
     pub fn connect(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        log::info!("Connecting to Binance WebSocket: {}", self.url);
+        tracing::info!("Connecting to Binance WebSocket: {}", self.url);
         let (ws, response) = tungstenite::connect(self.url.as_ref())?;
-        log::info!("Connected successfully. Response status: {}", response.status());
+        tracing::info!("Connected successfully. Response status: {}", response.status());
         self.websocket = Some(ws);
         Ok(())
     }
@@ -103,17 +120,17 @@ impl BinanceIngestor {
                             let mut buffer = self.buffer_pool.get();
                             buffer.extend_from_slice(text.as_bytes());
                             if self.message_sender.try_send(buffer).is_err() {
-                                log::error!("Warning: Processing queue full, dropping message");
+                                tracing::error!("Warning: Processing queue full, dropping message");
                             }
                         } else if let Message::Binary(data) = msg {
                             // Get buffer from pool and copy message data
                             let mut buffer = self.buffer_pool.get();
                             buffer.extend_from_slice(&data);
                             if self.message_sender.try_send(buffer).is_err() {
-                                log::error!("Warning: Processing queue full, dropping message");
+                                tracing::error!("Warning: Processing queue full, dropping message");
                             }
                         } else if let Message::Close(_) = msg {
-                            log::error!("WebSocket closed by server");
+                            tracing::error!("WebSocket closed by server");
                             break;
                         }
                     }
@@ -122,7 +139,7 @@ impl BinanceIngestor {
                         continue;
                     }
                     Err(err) => {
-                        log::error!("WebSocket error: {err}");
+                        tracing::error!("WebSocket error: {err}");
                         return Err(err.into());
                     }
                 }
@@ -194,7 +211,7 @@ impl MultiSymbolIngestor {
 
             let handle = std::thread::spawn(move || {
                 if let Err(err) = ingestor_clone.run() {
-                    log::error!("Error running ingestor for {symbol_clone2}: {err}");
+                    tracing::error!("Error running ingestor for {symbol_clone2}: {err}");
                 }
             });
             handles.push(handle);

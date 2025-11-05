@@ -13,8 +13,8 @@ crossbeam-channel = { workspace = true }
 crossbeam-queue = { workspace = true }
 ctrlc = { workspace = true }
 num_cpus = { workspace = true }
-log ={ workspace = true }
 rapidhash = { workspace = true }
+tracing = { workspace = true }
 tungstenite = { workspace = true }
 
 [dev-dependencies]

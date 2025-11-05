@@ -1,0 +1,16 @@
+[package]
+name = "mm_backtest"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+mm_aeron = { workspace = true }
+mm_binary = { workspace = true }
+mm_strategy = { workspace = true }
+
+bytes = { workspace = true }
+time = { workspace = true }
+csv = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }

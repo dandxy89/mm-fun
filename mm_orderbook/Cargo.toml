@@ -5,8 +5,6 @@ edition = "2021"
 
 [dependencies]
 mm_binary = { workspace = true }
-
-ordered-float = { workspace = true }
 simd-json = { workspace = true }
 
 [dev-dependencies]

@@ -28,6 +28,12 @@ pub struct OrderBookBatchHeader {
     pub symbol_high: u64,
     /// Exchange timestamp in milliseconds
     pub timestamp: u64,
+    /// First update ID in this event (Binance U field)
+    pub first_update_id: u64,
+    /// Final update ID in this event (Binance u field)
+    pub final_update_id: u64,
+    /// Previous update ID for continuity checking (Binance pu field)
+    pub prev_update_id: u64,
 }
 
 /// Single price level (bid or ask)
@@ -74,11 +80,26 @@ pub struct OrderBookBatchMessage {
 }
 
 impl OrderBookBatchMessage {
-    pub const HEADER_SIZE: usize = 32;
+    pub const HEADER_SIZE: usize = 56; // Updated from 32 to include sequence IDs
     pub const MESSAGE_TYPE: u8 = 0x03;
 
     /// Create a new orderbook batch message
     pub fn new(exchange: Exchange, update_type: UpdateType, symbol: CompressedString, encoding: EncodingScheme, timestamp: u64) -> Self {
+        Self::new_with_ids(exchange, update_type, symbol, encoding, timestamp, 0, 0, 0)
+    }
+
+    /// Create a new orderbook batch message with sequence IDs
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_with_ids(
+        exchange: Exchange,
+        update_type: UpdateType,
+        symbol: CompressedString,
+        encoding: EncodingScheme,
+        timestamp: u64,
+        first_update_id: u64,
+        final_update_id: u64,
+        prev_update_id: u64,
+    ) -> Self {
         let header = OrderBookBatchHeader {
             header: Self::MESSAGE_TYPE,
             exchange: exchange as u8,
@@ -89,6 +110,9 @@ impl OrderBookBatchMessage {
             symbol_low: symbol.low,
             symbol_high: symbol.high,
             timestamp,
+            first_update_id,
+            final_update_id,
+            prev_update_id,
         };
 
         Self { header, bids: Vec::new(), asks: Vec::new() }
@@ -145,6 +169,9 @@ impl OrderBookBatchMessage {
         bytes.extend_from_slice(&header.symbol_low.to_le_bytes());
         bytes.extend_from_slice(&header.symbol_high.to_le_bytes());
         bytes.extend_from_slice(&header.timestamp.to_le_bytes());
+        bytes.extend_from_slice(&header.first_update_id.to_le_bytes());
+        bytes.extend_from_slice(&header.final_update_id.to_le_bytes());
+        bytes.extend_from_slice(&header.prev_update_id.to_le_bytes());
 
         // Serialize bids
         for bid in &self.bids {
@@ -192,6 +219,9 @@ impl OrderBookBatchMessage {
             symbol_low: u64::from_le_bytes(bytes[8..16].try_into().unwrap()),
             symbol_high: u64::from_le_bytes(bytes[16..24].try_into().unwrap()),
             timestamp: u64::from_le_bytes(bytes[24..32].try_into().unwrap()),
+            first_update_id: u64::from_le_bytes(bytes[32..40].try_into().unwrap()),
+            final_update_id: u64::from_le_bytes(bytes[40..48].try_into().unwrap()),
+            prev_update_id: u64::from_le_bytes(bytes[48..56].try_into().unwrap()),
         };
 
         let mut offset = Self::HEADER_SIZE;
@@ -251,6 +281,21 @@ impl OrderBookBatchMessage {
     /// Get asks
     pub fn asks(&self) -> &[PriceLevel] {
         &self.asks
+    }
+
+    /// Get first update ID (Binance U field)
+    pub fn first_update_id(&self) -> u64 {
+        self.header.first_update_id
+    }
+
+    /// Get final update ID (Binance u field)
+    pub fn final_update_id(&self) -> u64 {
+        self.header.final_update_id
+    }
+
+    /// Get previous update ID (Binance pu field)
+    pub fn prev_update_id(&self) -> u64 {
+        self.header.prev_update_id
     }
 }
 
