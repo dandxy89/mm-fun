@@ -53,7 +53,6 @@ impl BinanceClient {
                     return Err(self.handle_error_response(response).await);
                 }
 
-                // Use from_slice for more efficient deserialization than .json()
                 let bytes = response.bytes().await?;
                 let snapshot: OrderbookSnapshot = serde_json::from_slice(&bytes)?;
                 Ok(snapshot)

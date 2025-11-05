@@ -1,0 +1,75 @@
+version: "3.8"
+
+services:
+  # Aeron Media Driver - must start first
+  aeronmd:
+    build:
+      context: .
+      dockerfile: docker/aeronmd/Dockerfile
+    container_name: aeronmd
+    shm_size: 512m
+    networks:
+      - aeron-network
+    volumes:
+      - aeron-shm:/dev/shm
+    healthcheck:
+      test: ["CMD", "test", "-d", "/dev/shm/aeron"]
+      interval: 5s
+      timeout: 3s
+      start_period: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # Market Data Collector Service
+  mm_collector:
+    build:
+      context: .
+      dockerfile: docker/mm_collector/Dockerfile
+    container_name: mm_collector
+    depends_on:
+      aeronmd:
+        condition: service_healthy
+    environment:
+      - AERON_DIR=/dev/shm/aeron
+      - RUST_LOG=info
+      - SYMBOL=BTCUSDT
+    networks:
+      - aeron-network
+    volumes:
+      - ./logs:/app/logs
+      - aeron-shm:/dev/shm
+    restart: unless-stopped
+
+  # Pricing Service
+  mm_pricing:
+    build:
+      context: .
+      dockerfile: docker/mm_pricing/Dockerfile
+    container_name: mm_pricing
+    depends_on:
+      aeronmd:
+        condition: service_healthy
+      mm_collector:
+        condition: service_started
+    environment:
+      - AERON_DIR=/dev/shm/aeron
+      - RUST_LOG=info
+      - SYMBOL=BTCUSDT
+    networks:
+      - aeron-network
+    volumes:
+      - ./logs:/app/logs
+      - aeron-shm:/dev/shm
+    restart: unless-stopped
+
+networks:
+  aeron-network:
+    driver: bridge
+
+volumes:
+  aeron-shm:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=512m

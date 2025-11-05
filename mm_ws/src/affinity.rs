@@ -23,10 +23,10 @@ impl AffinityManager {
     }
 
     pub fn pin_parser_thread(&self, parser_id: usize) {
-        if let Some(&core_idx) = self.parser_cores.get(parser_id)
-            && let Some(core_id) = core_affinity::get_core_ids().and_then(|ids| ids.get(core_idx).cloned())
-        {
-            core_affinity::set_for_current(core_id);
+        if let Some(&core_idx) = self.parser_cores.get(parser_id) {
+            if let Some(core_id) = core_affinity::get_core_ids().and_then(|ids| ids.get(core_idx).cloned()) {
+                core_affinity::set_for_current(core_id);
+            }
         }
     }
 

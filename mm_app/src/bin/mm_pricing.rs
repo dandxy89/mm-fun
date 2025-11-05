@@ -4,15 +4,15 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 use std::time::Instant;
 
+use mm_aeron::Subscriber;
+use mm_app::aeron_config;
 use mm_app::cli;
 use mm_app::monitoring;
 use mm_app::shutdown_handler;
-use mm_app::zmq_config;
 use mm_binary::OrderBookBatchMessage;
 use mm_binary::from_fixed_point;
 use mm_http::binance::BinanceClient;
 use mm_orderbook::OrderBook;
-use mm_zmq::Subscriber;
 use tracing::debug;
 use tracing::info;
 use tracing::warn;
@@ -28,10 +28,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let symbol = cli::get_symbol_uppercase("BTCUSDT");
     info!("Starting pricing app for {symbol}");
 
-    // Connect to ZMQ for market data (synchronous)
+    // Connect to Aeron for market data (synchronous)
     let mut subscriber = Subscriber::new();
-    subscriber.connect(zmq_config::MARKET_DATA_SUBSCRIBE_ADDR, zmq_config::MARKET_DATA_TOPIC)?;
-    info!("Connected to market data topic at {}", zmq_config::MARKET_DATA_SUBSCRIBE_ADDR);
+    subscriber.add_subscription(aeron_config::MARKET_DATA_CHANNEL, aeron_config::MARKET_DATA_STREAM_ID)?;
+    info!("Subscribed to market data on stream {}", aeron_config::MARKET_DATA_STREAM_ID);
 
     // Fetch full orderbook snapshot via HTTP
     // We need a minimal tokio runtime ONLY for this one-time HTTP call
@@ -78,14 +78,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     while running.load(Ordering::Relaxed) {
         // Periodically check for stale heartbeats
         if last_heartbeat_check.elapsed() > HEARTBEAT_CHECK_INTERVAL {
-            monitoring::is_heartbeat_stale(&last_heartbeat_timestamp, zmq_config::HEARTBEAT_TIMEOUT_MS);
+            monitoring::is_heartbeat_stale(&last_heartbeat_timestamp, aeron_config::HEARTBEAT_TIMEOUT_MS);
             last_heartbeat_check = Instant::now();
         }
-        // Receive binary message from ZMQ (synchronous)
+        // Receive binary message from Aeron (synchronous)
         let data = match subscriber.receive() {
             Ok(d) => d,
             Err(err) => {
-                warn!("ZMQ receive error: {err}");
+                warn!("Aeron receive error: {err}");
                 continue;
             }
         };
@@ -138,15 +138,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         // Log mid-point every 5 seconds
-        if orderbook_synchronised
-            && last_midpoint_log.elapsed() > MIDPOINT_LOG_INTERVAL
-            && let (Some((bid_price, _)), Some((ask_price, _))) = (orderbook.best_bid(), orderbook.best_ask())
-        {
-            let spread = ask_price - bid_price;
-            if spread >= 0.0 {
-                let mid_point = (bid_price + ask_price) / 2.0;
-                info!("Mid-point: {:.2} (bid: {:.2}, ask: {:.2}, spread: {:.2})", mid_point, bid_price, ask_price, spread);
-                last_midpoint_log = Instant::now();
+        if orderbook_synchronised && last_midpoint_log.elapsed() > MIDPOINT_LOG_INTERVAL {
+            if let (Some((bid_price, _)), Some((ask_price, _))) = (orderbook.best_bid(), orderbook.best_ask()) {
+                let spread = ask_price - bid_price;
+                if spread >= 0.0 {
+                    let mid_point = (bid_price + ask_price) / 2.0;
+                    info!("Mid-point: {:.2} (bid: {:.2}, ask: {:.2}, spread: {:.2})", mid_point, bid_price, ask_price, spread);
+                    last_midpoint_log = Instant::now();
+                }
             }
         }
     }

@@ -5,7 +5,7 @@ use reqwest::ClientBuilder;
 
 use crate::errors::Result;
 
-/// Configuration for HTTP client optimized for low-latency trading
+/// Configuration for HTTP client.
 #[derive(Debug, Clone)]
 pub struct HttpClientConfig {
     /// Maximum idle connections per host (default: 50)
@@ -69,7 +69,7 @@ impl Default for HttpClientConfig {
 }
 
 impl HttpClientConfig {
-    /// Configuration optimized for ultra-low latency financial trading
+    /// Configuration with shorter timeouts.
     pub fn low_latency() -> Self {
         Self {
             pool_max_idle_per_host: 10,
@@ -88,7 +88,7 @@ impl HttpClientConfig {
         }
     }
 
-    /// Configuration for high-throughput scenarios
+    /// Configuration with larger connection pool.
     pub fn high_throughput() -> Self {
         Self { pool_max_idle_per_host: 100, pool_idle_timeout: Duration::from_secs(120), ..Default::default() }
     }

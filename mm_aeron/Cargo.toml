@@ -1,0 +1,19 @@
+[package]
+name = "mm_aeron"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+rusteron-client = { workspace = true }
+rusteron-media-driver = { workspace = true }
+bytes = { workspace = true }
+thiserror = { workspace = true }
+log = { workspace = true }
+tracing = { workspace = true }
+parking_lot = { workspace = true }
+
+[dev-dependencies]
+mm_binary = { workspace = true }
+
+[features]
+default = []

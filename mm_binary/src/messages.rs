@@ -199,6 +199,11 @@ impl MarketDataMessage {
         result
     }
 
+    /// # Safety
+    ///
+    /// The caller must ensure:
+    /// - `bytes.len() >= Self::SIZE`
+    /// - `bytes.as_ptr()` is aligned to 16 bytes
     pub unsafe fn from_bytes_unchecked(bytes: &[u8]) -> &Self {
         debug_assert!(bytes.len() >= Self::SIZE);
         debug_assert!((bytes.as_ptr() as usize).is_multiple_of(16));
@@ -341,6 +346,11 @@ impl PricingOutputMessage {
         result
     }
 
+    /// # Safety
+    ///
+    /// The caller must ensure:
+    /// - `bytes.len() >= Self::SIZE`
+    /// - `bytes.as_ptr()` is aligned to 16 bytes
     pub unsafe fn from_bytes_unchecked(bytes: &[u8]) -> &Self {
         debug_assert!(bytes.len() >= Self::SIZE);
         debug_assert!((bytes.as_ptr() as usize).is_multiple_of(16));
@@ -419,6 +429,11 @@ impl HeartbeatMessage {
         result
     }
 
+    /// # Safety
+    ///
+    /// The caller must ensure:
+    /// - `bytes.len() >= Self::SIZE`
+    /// - `bytes.as_ptr()` is aligned to 16 bytes
     pub unsafe fn from_bytes_unchecked(bytes: &[u8]) -> &Self {
         debug_assert!(bytes.len() >= Self::SIZE);
         debug_assert!((bytes.as_ptr() as usize).is_multiple_of(16));
@@ -514,6 +529,11 @@ impl CollectorStateMessage {
         result
     }
 
+    /// # Safety
+    ///
+    /// The caller must ensure:
+    /// - `bytes.len() >= Self::SIZE`
+    /// - `bytes.as_ptr()` is aligned to 16 bytes
     pub unsafe fn from_bytes_unchecked(bytes: &[u8]) -> &Self {
         debug_assert!(bytes.len() >= Self::SIZE);
         debug_assert!((bytes.as_ptr() as usize).is_multiple_of(16));

@@ -255,7 +255,7 @@ mod tests {
 
     #[test]
     fn test_refill() {
-        let bucket = LeakyBucket::new(100, 100.0); // 1000 tokens/sec for fast refill
+        let bucket = LeakyBucket::new(100, 100.0); // 100 tokens/sec refill rate
 
         // Exhaust tokens
         assert!(bucket.try_acquire(100).is_ok());

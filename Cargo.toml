@@ -5,22 +5,25 @@ members = [
     "mm_ws",
     "mm_http",
     "mm_app",
-    "mm_zmq",
+    "mm_aeron",
     "mm_tg",
     "mm_ratelimit",
 ]
 resolver = "3"
 
 [workspace.dependencies]
+mm_aeron = { path = "mm_aeron" }
 mm_binary = { path = "mm_binary" }
 mm_http = { path = "mm_http" }
 mm_orderbook = { path = "mm_orderbook" }
 mm_tg = { path = "mm_tg" }
 mm_ws = { path = "mm_ws" }
-mm_zmq = { path = "mm_zmq" }
 
+rusteron-client = "0.1"
+rusteron-media-driver = "0.1.157"
 anyhow = "1.0.100"
 bytes = "1.10.1"
+parking_lot = "0.12.5"
 core_affinity = "0.8.3"
 criterion = "0.7.0"
 crossbeam-channel = "0.5.15"
@@ -35,12 +38,12 @@ hyper-util = { version = "0.1.17", features = [
     "client-legacy",
     "http2",
 ] }
-log = "0.4.22"
+log = "0.4.28"
 num_cpus = "1.17.0"
 ordered-float = "5.1.0"
-proptest = "1.8.0"
-rapidhash = "4.1.0"
-reqwest = { version = "0.12.23", default-features = false, features = [
+proptest = "1.9.0"
+rapidhash = "4.1.1"
+reqwest = { version = "0.12.24", default-features = false, features = [
     "rustls-tls",
     "http2",
     "hickory-dns",
@@ -48,14 +51,13 @@ reqwest = { version = "0.12.23", default-features = false, features = [
     "gzip",
     "brotli",
 ] }
-rustls = "0.23.32"
+rustls = "0.23.35"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
 simd-json = "0.17.0"
 thiserror = "2.0.17"
-tikv-jemallocator = "0.6.0"
-tokio = { version = "1.47.1", features = ["rt-multi-thread", "macros", "time"] }
-zmq = "0.10.0"
+tikv-jemallocator = "0.6.1"
+tokio = { version = "1.48.0", features = ["rt-multi-thread", "macros", "time"] }
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.20", features = ["env-filter", "fmt", "ansi"] }
 tracing-appender = "0.2.3"

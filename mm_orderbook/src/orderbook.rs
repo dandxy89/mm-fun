@@ -146,12 +146,12 @@ pub fn process_orderbook_update(orderbook: &mut OrderBook, json_data: &str) -> R
     // Process bids
     if let Some(bids) = parsed["b"].as_array() {
         for bid in bids {
-            if let Some(bid_array) = bid.as_array()
-                && bid_array.len() >= 2
-            {
-                let price = bid_array[0].as_str().ok_or("Invalid bid price")?.parse::<f64>()?;
-                let quantity = bid_array[1].as_str().ok_or("Invalid bid quantity")?.parse::<f64>()?;
-                orderbook.update_bid(price, quantity);
+            if let Some(bid_array) = bid.as_array() {
+                if bid_array.len() >= 2 {
+                    let price = bid_array[0].as_str().ok_or("Invalid bid price")?.parse::<f64>()?;
+                    let quantity = bid_array[1].as_str().ok_or("Invalid bid quantity")?.parse::<f64>()?;
+                    orderbook.update_bid(price, quantity);
+                }
             }
         }
     }
@@ -159,12 +159,12 @@ pub fn process_orderbook_update(orderbook: &mut OrderBook, json_data: &str) -> R
     // Process asks
     if let Some(asks) = parsed["a"].as_array() {
         for ask in asks {
-            if let Some(ask_array) = ask.as_array()
-                && ask_array.len() >= 2
-            {
-                let price = ask_array[0].as_str().ok_or("Invalid ask price")?.parse::<f64>()?;
-                let quantity = ask_array[1].as_str().ok_or("Invalid ask quantity")?.parse::<f64>()?;
-                orderbook.update_ask(price, quantity);
+            if let Some(ask_array) = ask.as_array() {
+                if ask_array.len() >= 2 {
+                    let price = ask_array[0].as_str().ok_or("Invalid ask price")?.parse::<f64>()?;
+                    let quantity = ask_array[1].as_str().ok_or("Invalid ask quantity")?.parse::<f64>()?;
+                    orderbook.update_ask(price, quantity);
+                }
             }
         }
     }

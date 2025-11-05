@@ -4,9 +4,9 @@ use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
+use mm_aeron::Subscriber;
 use mm_binary::CollectorStateMessage;
 use mm_binary::HeartbeatMessage;
-use mm_zmq::Subscriber;
 use tracing::debug;
 use tracing::warn;
 
@@ -15,10 +15,10 @@ use crate::time_utils;
 /// Configuration for heartbeat monitoring
 #[derive(Debug, Clone)]
 pub struct HeartbeatConfig {
-    /// ZMQ address to subscribe to
-    pub address: String,
-    /// Topic to subscribe to
-    pub topic: String,
+    /// Aeron channel to subscribe to
+    pub channel: String,
+    /// Aeron stream ID to subscribe to
+    pub stream_id: i32,
     /// Timeout in milliseconds before considering heartbeat stale
     pub timeout_ms: u64,
     /// How often to check for stale heartbeats
@@ -28,9 +28,9 @@ pub struct HeartbeatConfig {
 impl Default for HeartbeatConfig {
     fn default() -> Self {
         Self {
-            address: crate::zmq_config::HEARTBEAT_SUBSCRIBE_ADDR.to_string(),
-            topic: crate::zmq_config::HEARTBEAT_TOPIC.to_string(),
-            timeout_ms: crate::zmq_config::HEARTBEAT_TIMEOUT_MS,
+            channel: crate::aeron_config::HEARTBEAT_CHANNEL.to_string(),
+            stream_id: crate::aeron_config::HEARTBEAT_STREAM_ID,
+            timeout_ms: crate::aeron_config::HEARTBEAT_TIMEOUT_MS,
             check_interval: Duration::from_secs(2),
         }
     }
@@ -41,15 +41,18 @@ pub fn spawn_heartbeat_monitor(
     config: HeartbeatConfig,
     running: Arc<AtomicBool>,
 ) -> Result<(std::thread::JoinHandle<()>, Arc<AtomicU64>), Box<dyn std::error::Error>> {
-    // Connect to heartbeat topic
-    let mut subscriber = Subscriber::new();
-    subscriber.connect(&config.address, &config.topic)?;
-    tracing::info!("Heartbeat monitor connected to {} on topic {}", config.address, config.topic);
-
     let last_heartbeat_timestamp = Arc::new(AtomicU64::new(time_utils::unix_timestamp_ms()));
 
     let last_hb_clone = Arc::clone(&last_heartbeat_timestamp);
     let handle = std::thread::spawn(move || {
+        // Create subscriber inside the thread to avoid Send issues
+        let mut subscriber = Subscriber::new();
+        if let Err(err) = subscriber.add_subscription(&config.channel, config.stream_id) {
+            tracing::error!("Failed to subscribe to heartbeat stream: {err}");
+            return;
+        }
+        tracing::info!("Heartbeat monitor subscribed to stream {}", config.stream_id);
+
         let mut last_sequence: Option<u64> = None;
 
         while running.load(Ordering::Relaxed) {
@@ -95,15 +98,15 @@ pub fn spawn_heartbeat_monitor(
 /// Configuration for collector state monitoring
 #[derive(Debug, Clone)]
 pub struct StateMonitorConfig {
-    /// ZMQ address to subscribe to
-    pub address: String,
-    /// Topic to subscribe to
-    pub topic: String,
+    /// Aeron channel to subscribe to
+    pub channel: String,
+    /// Aeron stream ID to subscribe to
+    pub stream_id: i32,
 }
 
 impl Default for StateMonitorConfig {
     fn default() -> Self {
-        Self { address: crate::zmq_config::STATE_SUBSCRIBE_ADDR.to_string(), topic: crate::zmq_config::COLLECTOR_STATE_TOPIC.to_string() }
+        Self { channel: crate::aeron_config::STATE_CHANNEL.to_string(), stream_id: crate::aeron_config::STATE_STREAM_ID }
     }
 }
 
@@ -112,19 +115,22 @@ pub fn spawn_state_monitor(
     config: StateMonitorConfig,
     running: Arc<AtomicBool>,
 ) -> Result<std::thread::JoinHandle<()>, Box<dyn std::error::Error>> {
-    // Connect to state topic
-    let mut subscriber = Subscriber::new();
-    subscriber.connect(&config.address, &config.topic)?;
-    tracing::info!("State monitor connected to {} on topic {}", config.address, config.topic);
-
     let handle = std::thread::spawn(move || {
+        // Create subscriber inside the thread to avoid Send issues
+        let mut subscriber = Subscriber::new();
+        if let Err(err) = subscriber.add_subscription(&config.channel, config.stream_id) {
+            tracing::error!("Failed to subscribe to state stream: {err}");
+            return;
+        }
+        tracing::info!("State monitor subscribed to stream {}", config.stream_id);
+
         while running.load(Ordering::Relaxed) {
             match subscriber.receive() {
                 Ok(data) => {
-                    if let Ok(state_msg) = CollectorStateMessage::from_bytes(&data)
-                        && let Ok(state) = state_msg.state()
-                    {
-                        debug!("[Collector {}] State: {state:?}, Messages: {}", state_msg.connection_id, state_msg.messages_received);
+                    if let Ok(state_msg) = CollectorStateMessage::from_bytes(&data) {
+                        if let Ok(state) = state_msg.state() {
+                            debug!("[Collector {}] State: {state:?}, Messages: {}", state_msg.connection_id, state_msg.messages_received);
+                        }
                     }
                 }
                 Err(err) => {
