@@ -29,11 +29,11 @@ mm_types = { path = "mm_types" }
 mm_ws = { path = "mm_ws" }
 
 anyhow = "1.0.100"
-bytes = "1.10.1"
+bytes = "1.11.0"
 time = { version = "0.3", features = ["serde", "parsing", "formatting", "macros"] }
-config = "0.14.1"
+config = "0.15.19"
 core_affinity = "0.8.3"
-criterion = "0.7.0"
+criterion = "0.8.0"
 crossbeam-channel = "0.5.15"
 crossbeam-queue = "0.3.12"
 csv = "1.3.1"
